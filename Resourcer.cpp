@@ -210,7 +210,7 @@ BOOL CALLBACK EnumResNameProcW(
 		// Output type
 		if (!bTypeIsIntResource)
 		{
-			std::wcout << L"\"" << resType << L"\"" << szDelim;
+			std::wcout << resType << szDelim;
 		}
 		else
 		{
@@ -218,14 +218,14 @@ BOOL CALLBACK EnumResNameProcW(
 			if (szType)
 				std::wcout << szType << szDelim;
 			else
-				std::wcout << L"INT(" << DWORD(resType) << L")" << szDelim;
+				std::wcout << L"INT(" << ULONGLONG(resType) << L")" << szDelim;
 		}
 
 		// Output name
 		if (!bNameIsIntResource)
 			std::wcout << resName << szDelim;
 		else
-			std::wcout << L"INT(" << DWORD(resName) << L")" << szDelim;
+			std::wcout << L"INT(" << ULONGLONG(resName) << L")" << szDelim;
 
 		// Output resource size
 		std::wcout << dwResourceSize << szDelim;
