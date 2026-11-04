@@ -8,6 +8,7 @@
 #include "SysErrorMessage.h"
 #include "PredefResTypes.h"
 
+// ------------------------------------------------------------------------------------------
 /// <summary>
 /// Write command-line syntax to stderr and then exit.
 /// </summary>
@@ -49,9 +50,14 @@ static void Usage(const wchar_t* argv0, const wchar_t* szError = nullptr)
 	exit(-1);
 }
 
-enum class eListType_t { eListAll, eListNamedTypes, eListOneType, eUndefined };
+// ------------------------------------------------------------------------------------------
+
+const wchar_t* szDelim = L"\t";
+enum class eListType_t { eListAll, eListOnlyNamedTypes, eListOneType, eUndefined };
 static void DoList(HMODULE hMod, eListType_t listType, RESTYPE resType);
 static void DoExport(HMODULE hMod, RESTYPE resType, const wchar_t* resName, const wchar_t* szOutfile);
+
+// ------------------------------------------------------------------------------------------
 
 int wmain(int argc, wchar_t** argv)
 {
@@ -70,7 +76,7 @@ int wmain(int argc, wchar_t** argv)
 	}
 
 	// Parse the rest of the command line.
-	eListType_t listType = eListType_t::eListNamedTypes;
+	eListType_t listType = eListType_t::eListOnlyNamedTypes;
 	RESTYPE resType = 0;
 	wchar_t* resName = 0;
 	wchar_t* szOutFile = 0;
@@ -142,17 +148,87 @@ int wmain(int argc, wchar_t** argv)
 		Usage(argv[0]);
 	}
 
-	FreeLibrary(hMod);
+	if (bList)
+		DoList(hMod, listType, resType);
+	else // bExport
+		DoExport(hMod, resType, resName, szOutFile);
+
+	if (hMod) FreeLibrary(hMod);
 
 	return 0;
 }
 
+// ------------------------------------------------------------------------------------------
+
 static void DoList(HMODULE hMod, eListType_t listType, RESTYPE resType)
 {
+	// Tab-delimited headers
+	std::wcout
+		<< L"Type" << szDelim
+		<< L"Name" << szDelim
+		<< L"Size" << szDelim
+		<< L"First bytes" << std::endl;
 
+	//EnumResourceTypesExW 
+	//EnumResourceNamesExW
+}
+
+// ------------------------------------------------------------------------------------------
+
+static LPVOID GetResourceSizeAndData(HMODULE hMod, RESTYPE resType, const wchar_t* resName, DWORD& dwResourceSize)
+{
+	dwResourceSize = 0;
+	const wchar_t* szErrLabel = L"";
+
+	szErrLabel = L"Cannot find resource";
+	HRSRC hRsrc = FindResourceW(hMod, resName, resType);
+	if (hRsrc)
+	{
+		szErrLabel = L"Cannot get resource size";
+		dwResourceSize = SizeofResource(hMod, hRsrc);
+		if (dwResourceSize > 0)
+		{
+			szErrLabel = L"Cannot load resource";
+			HGLOBAL hGbl = LoadResource(hMod, hRsrc);
+			if (NULL != hGbl)
+			{
+				szErrLabel = L"Cannot lock resource";
+				LPVOID pData = LockResource(hGbl);
+				if (pData)
+				{
+					return pData;
+				}
+			}
+		}
+	}
+
+	DWORD dwLastErr = GetLastError();
+	std::wcerr << szErrLabel << L": " << SysErrorMessageWithCode(dwLastErr) << std::endl;
+	return nullptr;
 }
 
 static void DoExport(HMODULE hMod, RESTYPE resType, const wchar_t* resName, const wchar_t* szOutfile)
 {
-
+	DWORD dwResourceSize = 0;
+	LPVOID pData = GetResourceSizeAndData(hMod, resType, resName, dwResourceSize);
+	if (pData)
+	{
+		Wow64FsRedirection fsRedir(true);
+		HANDLE hFile = CreateFileW(szOutfile, FILE_GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+		DWORD dwLastErr = GetLastError();
+		fsRedir.Revert();
+		if (INVALID_HANDLE_VALUE == hFile)
+		{
+			std::wcerr << L"Cannot create export file: " << SysErrorMessageWithCode(dwLastErr) << std::endl;
+			return;
+		}
+		DWORD dwNumWritten = 0;
+		BOOL wfRet = WriteFile(hFile, pData, dwResourceSize, &dwNumWritten, NULL);
+		dwLastErr = GetLastError();
+		CloseHandle(hFile);
+		if (wfRet)
+			std::wcerr << L"Success." << std::endl;
+		else
+			std::wcerr << L"Could not write to export file: " << SysErrorMessageWithCode(dwLastErr) << std::endl;
+	}
 }
