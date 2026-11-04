@@ -6,6 +6,7 @@
 #include "StringUtils.h"
 #include "Wow64FsRedirection.h"
 #include "SysErrorMessage.h"
+#include "HEX.h"
 #include "PredefResTypes.h"
 
 // ------------------------------------------------------------------------------------------
@@ -160,21 +161,6 @@ int wmain(int argc, wchar_t** argv)
 
 // ------------------------------------------------------------------------------------------
 
-static void DoList(HMODULE hMod, eListType_t listType, RESTYPE resType)
-{
-	// Tab-delimited headers
-	std::wcout
-		<< L"Type" << szDelim
-		<< L"Name" << szDelim
-		<< L"Size" << szDelim
-		<< L"First bytes" << std::endl;
-
-	//EnumResourceTypesExW 
-	//EnumResourceNamesExW
-}
-
-// ------------------------------------------------------------------------------------------
-
 static LPVOID GetResourceSizeAndData(HMODULE hMod, RESTYPE resType, const wchar_t* resName, DWORD& dwResourceSize)
 {
 	dwResourceSize = 0;
@@ -206,6 +192,96 @@ static LPVOID GetResourceSizeAndData(HMODULE hMod, RESTYPE resType, const wchar_
 	std::wcerr << szErrLabel << L": " << SysErrorMessageWithCode(dwLastErr) << std::endl;
 	return nullptr;
 }
+
+// ------------------------------------------------------------------------------------------
+
+BOOL CALLBACK EnumResNameProcW(
+	_In_opt_ HMODULE hModule,
+	_In_ LPCWSTR resType,
+	_In_ LPWSTR resName,
+	_In_ LONG_PTR) //lParam)
+{
+	bool bTypeIsIntResource = IS_INTRESOURCE(resType);
+	bool bNameIsIntResource = IS_INTRESOURCE(resName);
+	DWORD dwResourceSize = 0;
+	LPVOID pData = GetResourceSizeAndData(hModule, resType, resName, dwResourceSize);
+	if (pData)
+	{
+		// Output type
+		if (!bTypeIsIntResource)
+		{
+			std::wcout << L"\"" << resType << L"\"" << szDelim;
+		}
+		else
+		{
+			const wchar_t* szType = ResTypeToStr(resType);
+			if (szType)
+				std::wcout << szType << szDelim;
+			else
+				std::wcout << L"INT(" << DWORD(resType) << L")" << szDelim;
+		}
+
+		// Output name
+		if (!bNameIsIntResource)
+			std::wcout << resName << szDelim;
+		else
+			std::wcout << L"INT(" << DWORD(resName) << L")" << szDelim;
+
+		// Output resource size
+		std::wcout << dwResourceSize << szDelim;
+
+		// Output first bytes
+		const byte* pBytes = (const byte*)pData;
+		DWORD numBytes = min(dwResourceSize, 8);
+		for (DWORD ixByte = 0; ixByte < numBytes; ++ixByte)
+		{
+			std::wcout << HEXW(pBytes[ixByte]) << L" ";
+		}
+		std::wcout << std::endl;
+	}
+	return TRUE;
+}
+
+//typedef struct {
+//	eListType_t listType;
+//	RESTYPE resType;
+//} DoListLParam_t;
+
+BOOL CALLBACK EnumResTypeProcW(
+	_In_opt_ HMODULE hModule,
+	_In_ LPWSTR resType,
+	_In_ LONG_PTR lParam
+)
+{
+	if (!lParam)
+		return TRUE;
+	eListType_t* pListType = (eListType_t*)lParam;
+	if (eListType_t::eListOnlyNamedTypes == *pListType && IS_INTRESOURCE(resType))
+		return TRUE;
+	EnumResourceNamesExW(hModule, resType, EnumResNameProcW, NULL, RESOURCE_ENUM_LN, 0);
+	return TRUE;
+}
+
+static void DoList(HMODULE hMod, eListType_t listType, RESTYPE resType)
+{
+	// Tab-delimited headers
+	std::wcout
+		<< L"Type" << szDelim
+		<< L"Name" << szDelim
+		<< L"Size" << szDelim
+		<< L"First bytes" << std::endl;
+
+	if (eListType_t::eListOneType == listType)
+	{
+		EnumResourceNamesExW(hMod, resType, EnumResNameProcW, NULL, RESOURCE_ENUM_LN, 0);
+	}
+	else
+	{
+		EnumResourceTypesExW(hMod, EnumResTypeProcW, (LONG_PTR)&listType, RESOURCE_ENUM_LN, 0);
+	}
+}
+
+// ------------------------------------------------------------------------------------------
 
 static void DoExport(HMODULE hMod, RESTYPE resType, const wchar_t* resName, const wchar_t* szOutfile)
 {
