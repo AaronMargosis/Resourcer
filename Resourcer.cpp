@@ -233,9 +233,36 @@ BOOL CALLBACK EnumResNameProcW(
 		// Output first bytes
 		const byte* pBytes = (const byte*)pData;
 		DWORD numBytes = min(dwResourceSize, 8);
+		bool bAddSpace = false;
 		for (DWORD ixByte = 0; ixByte < numBytes; ++ixByte)
 		{
-			std::wcout << HEXW(pBytes[ixByte]) << L" ";
+			byte b = pBytes[ixByte];
+			const wchar_t* szSpecial = nullptr;
+			switch (b)
+			{
+			case 0x09: szSpecial = L"TAB"; break;
+			case 0x0A: szSpecial = L"LF"; break;
+			case 0x0D: szSpecial = L"CR"; break;
+			case 0x22: szSpecial = L"DQ"; break;
+			}
+			if (szSpecial)
+			{
+				if (0 != ixByte) std::wcout << L" ";
+				std::wcout << szSpecial;
+				bAddSpace = true;
+			}
+			else if (0x20 <= b && b < 0x7f)
+			{
+				if (bAddSpace) { std::wcout << L" "; }
+				std::wcout << (wchar_t)b;
+				bAddSpace = false;
+			}
+			else
+			{
+				if (0 != ixByte) std::wcout << L" ";
+				std::wcout << HEXW(pBytes[ixByte]);
+				bAddSpace = true;
+			}
 		}
 		std::wcout << std::endl;
 	}

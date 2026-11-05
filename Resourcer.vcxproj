@@ -137,9 +137,13 @@
   <ItemGroup>
     <ClInclude Include="HEX.h" />
     <ClInclude Include="PredefResTypes.h" />
+    <ClInclude Include="resource.h" />
     <ClInclude Include="StringUtils.h" />
     <ClInclude Include="SysErrorMessage.h" />
     <ClInclude Include="Wow64FsRedirection.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="Resourcer.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
