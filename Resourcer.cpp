@@ -3,13 +3,13 @@
 
 #include <Windows.h>
 #include <iostream>
+#include <sstream>
+#include <list>
 #include "StringUtils.h"
 #include "Wow64FsRedirection.h"
 #include "SysErrorMessage.h"
 #include "HEX.h"
 #include "PredefResTypes.h"
-
-//TODO: Need an option to output a formatted table rather than tab-delimited.
 
 // ------------------------------------------------------------------------------------------
 /// <summary>
@@ -29,7 +29,7 @@ static void Usage(const wchar_t* argv0, const wchar_t* szError = nullptr)
 		<< std::endl
 		<< L"Usage:" << std::endl
 		<< std::endl
-		<< L"    " << sExe << L" srcFile -list [-t resType]" << std::endl
+		<< L"    " << sExe << L" srcFile -list [-t resType] [-c|-ct]" << std::endl
 		<< L"    " << sExe << L" srcFile -export -t resType {-n resName | -i resID} -o outfile" << std::endl
 		<< std::endl
 		<< L"srcFile must be the first parameter: the path to a portable executable (PE) file with resources." << std::endl
@@ -40,6 +40,8 @@ static void Usage(const wchar_t* argv0, const wchar_t* szError = nullptr)
 		<< L"            if a particular resource type, lists resources of that type" << std::endl
 		<< L"                (see list below for predefined types);" << std::endl
 		<< L"            if omitted, lists resources with named(non-MAKEINTRESOURCE) types." << std::endl
+		<< L"  -c      : Output as comma-delimited text." << std::endl
+		<< L"  -ct     : Output as tab-delimited text." << std::endl
 		<< std::endl
 		<< L"With -export:" << std::endl
 		<< L"  resType : resource type (see list below for predefined types)." << std::endl
@@ -55,10 +57,10 @@ static void Usage(const wchar_t* argv0, const wchar_t* szError = nullptr)
 
 // ------------------------------------------------------------------------------------------
 
-const wchar_t* szDelim = L"\t";
 enum class eListType_t { eListAll, eListOnlyNamedTypes, eListOneType, eUndefined };
-static void DoList(HMODULE hMod, eListType_t listType, RESTYPE resType);
-static void DoExport(HMODULE hMod, RESTYPE resType, const wchar_t* resName, const wchar_t* szOutfile);
+enum class eListFormat_t { eTable, eCommaDelimited, eTabDelimited };
+static void DoList(HMODULE hModule, eListFormat_t listFmt, eListType_t listType, RESTYPE resType);
+static void DoExport(HMODULE hModule, RESTYPE resType, const wchar_t* resName, const wchar_t* szOutfile);
 
 // ------------------------------------------------------------------------------------------
 
@@ -80,6 +82,7 @@ int wmain(int argc, wchar_t** argv)
 
 	// Parse the rest of the command line.
 	eListType_t listType = eListType_t::eListOnlyNamedTypes;
+	eListFormat_t listFmt = eListFormat_t::eTable;
 	RESTYPE resType = 0;
 	wchar_t* resName = 0;
 	wchar_t* szOutFile = 0;
@@ -99,6 +102,14 @@ int wmain(int argc, wchar_t** argv)
 				if (0 == resType)
 					resType = szResType;
 			}
+		}
+		else if (0 == _wcsicmp(argv[ixArg], L"-c"))
+		{
+			listFmt = eListFormat_t::eCommaDelimited;
+		}
+		else if (0 == _wcsicmp(argv[ixArg], L"-ct"))
+		{
+			listFmt = eListFormat_t::eTabDelimited;
 		}
 		else if (0 == _wcsicmp(argv[ixArg], L"-n"))
 		{
@@ -142,42 +153,47 @@ int wmain(int argc, wchar_t** argv)
 	}
 
 	Wow64FsRedirection fsRedir(true);
-	HMODULE hMod = LoadLibraryExW(szSrcFile, NULL, LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
+	HMODULE hModule = LoadLibraryExW(szSrcFile, NULL, LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
 	DWORD dwLastErr = GetLastError();
 	fsRedir.Revert();
-	if (NULL == hMod)
+	if (NULL == hModule)
 	{
 		std::wcerr << SysErrorMessageWithCode(dwLastErr) << std::endl << std::endl;
 		Usage(argv[0]);
 	}
 
 	if (bList)
-		DoList(hMod, listType, resType);
+		DoList(hModule, listFmt, listType, resType);
 	else // bExport
-		DoExport(hMod, resType, resName, szOutFile);
+		DoExport(hModule, resType, resName, szOutFile);
 
-	if (hMod) FreeLibrary(hMod);
+	if (hModule) FreeLibrary(hModule);
 
 	return 0;
 }
 
 // ------------------------------------------------------------------------------------------
 
-static LPVOID GetResourceSizeAndData(HMODULE hMod, RESTYPE resType, const wchar_t* resName, DWORD& dwResourceSize)
+/// <summary>
+/// Utility function used by both list and export features.
+/// Returns resource size through reference variable, and address of resource data as function return value.
+/// On failure, writes error information to stderr and returns nullptr.
+/// </summary>
+static LPVOID GetResourceSizeAndData(HMODULE hModule, RESTYPE resType, const wchar_t* resName, DWORD& dwResourceSize)
 {
 	dwResourceSize = 0;
 	const wchar_t* szErrLabel = L"";
 
 	szErrLabel = L"Cannot find resource";
-	HRSRC hRsrc = FindResourceW(hMod, resName, resType);
+	HRSRC hRsrc = FindResourceW(hModule, resName, resType);
 	if (hRsrc)
 	{
 		szErrLabel = L"Cannot get resource size";
-		dwResourceSize = SizeofResource(hMod, hRsrc);
+		dwResourceSize = SizeofResource(hModule, hRsrc);
 		if (dwResourceSize > 0)
 		{
 			szErrLabel = L"Cannot load resource";
-			HGLOBAL hGbl = LoadResource(hMod, hRsrc);
+			HGLOBAL hGbl = LoadResource(hModule, hRsrc);
 			if (NULL != hGbl)
 			{
 				szErrLabel = L"Cannot lock resource";
@@ -197,6 +213,72 @@ static LPVOID GetResourceSizeAndData(HMODULE hMod, RESTYPE resType, const wchar_
 
 // ------------------------------------------------------------------------------------------
 
+typedef struct {
+	std::wstring sType, sName, sFirstBytes;
+	DWORD dwResourceSize;
+} resourceData_t;
+typedef std::list<resourceData_t> resourceList_t;
+
+class resourceListData_t
+{
+public:
+	resourceListData_t() = default;
+	~resourceListData_t() = default;
+
+	void Add(const std::wstring& sResType, const std::wstring& sResName, DWORD dwResourceSize, const std::wstring& sFirstBytes)
+	{
+		resourceData_t data;
+		data.sType = sResType;
+		data.sName = sResName;
+		data.dwResourceSize = dwResourceSize;
+		data.sFirstBytes = sFirstBytes;
+		m_maxTypeLen = max(m_maxTypeLen, sResType.length());
+		m_maxNameLen = max(m_maxNameLen, sResName.length());
+		m_maxSize = max(m_maxSize, dwResourceSize);
+	}
+
+	resourceList_t::const_iterator Begin() const
+	{
+		return m_resourceList.begin();
+	}
+	resourceList_t::const_iterator End() const
+	{
+		return m_resourceList.end();
+	}
+
+	size_t MaxTypeLen() const { return m_maxTypeLen; }
+	size_t MaxNameLen() const { return m_maxNameLen; }
+	size_t MaxSizeDecimalDigits() const {
+		if (m_maxSize < 10'000)
+			return 4;
+		if (m_maxSize < 100'000)
+			return 5;
+		if (m_maxSize < 1'000'000)
+			return 6;
+		if (m_maxSize < 10'000'000)
+			return 7;
+		if (m_maxSize < 100'000'000)
+			return 8;
+		if (m_maxSize < 1'000'000'000)
+			return 9;
+		return 10;
+	}
+
+private:
+	size_t m_maxTypeLen = 5, m_maxNameLen = 5, m_maxSize = 1;
+	resourceList_t m_resourceList;
+
+private:
+	resourceListData_t(const resourceListData_t&) = delete;
+	resourceListData_t& operator = (const resourceListData_t&) = delete;
+};
+
+// ------------------------------------------------------------------------------------------
+
+static resourceListData_t st_resourceListData;
+
+// ------------------------------------------------------------------------------------------
+
 BOOL CALLBACK EnumResNameProcW(
 	_In_opt_ HMODULE hModule,
 	_In_ LPCWSTR resType,
@@ -209,30 +291,32 @@ BOOL CALLBACK EnumResNameProcW(
 	LPVOID pData = GetResourceSizeAndData(hModule, resType, resName, dwResourceSize);
 	if (pData)
 	{
-		// Output type
+		std::wstringstream
+			strResType,
+			strResName,
+			strFirstBytes;
+
+		// Resource type
 		if (!bTypeIsIntResource)
 		{
-			std::wcout << resType << szDelim;
+			strResType << resType;
 		}
 		else
 		{
 			const wchar_t* szType = ResTypeToStr(resType);
 			if (szType)
-				std::wcout << szType << szDelim;
+				strResType << szType;
 			else
-				std::wcout << L"INT(" << ULONGLONG(resType) << L")" << szDelim;
+				strResType << L"INT(" << ULONGLONG(resType) << L")";
 		}
 
-		// Output name
+		// Resource name
 		if (!bNameIsIntResource)
-			std::wcout << resName << szDelim;
+			strResName << resName;
 		else
-			std::wcout << L"INT(" << ULONGLONG(resName) << L")" << szDelim;
+			strResName << L"INT(" << ULONGLONG(resName) << L")";
 
-		// Output resource size
-		std::wcout << dwResourceSize << szDelim;
-
-		// Output first bytes
+		// Format first bytes
 		const byte* pBytes = (const byte*)pData;
 		DWORD numBytes = min(dwResourceSize, 16);
 		bool bAddSpace = false;
@@ -249,32 +333,28 @@ BOOL CALLBACK EnumResNameProcW(
 			}
 			if (szSpecial)
 			{
-				if (0 != ixByte) std::wcout << L" ";
-				std::wcout << szSpecial;
+				if (0 != ixByte) strFirstBytes << L" ";
+				strFirstBytes << szSpecial;
 				bAddSpace = true;
 			}
 			else if (0x20 <= b && b < 0x7f)
 			{
-				if (bAddSpace) { std::wcout << L" "; }
-				std::wcout << (wchar_t)b;
+				if (bAddSpace) { strFirstBytes << L" "; }
+				strFirstBytes << (wchar_t)b;
 				bAddSpace = false;
 			}
 			else
 			{
-				if (0 != ixByte) std::wcout << L" ";
-				std::wcout << HEXW(pBytes[ixByte]);
+				if (0 != ixByte) strFirstBytes << L" ";
+				strFirstBytes << HEXW(pBytes[ixByte]);
 				bAddSpace = true;
 			}
 		}
-		std::wcout << std::endl;
+
+		st_resourceListData.Add(strResType.str(), strResName.str(), dwResourceSize, strFirstBytes.str());
 	}
 	return TRUE;
 }
-
-//typedef struct {
-//	eListType_t listType;
-//	RESTYPE resType;
-//} DoListLParam_t;
 
 BOOL CALLBACK EnumResTypeProcW(
 	_In_opt_ HMODULE hModule,
@@ -291,31 +371,72 @@ BOOL CALLBACK EnumResTypeProcW(
 	return TRUE;
 }
 
-static void DoList(HMODULE hMod, eListType_t listType, RESTYPE resType)
+static void DoList(HMODULE hModule, eListFormat_t listFmt, eListType_t listType, RESTYPE resType)
 {
-	// Tab-delimited headers
-	std::wcout
-		<< L"Type" << szDelim
-		<< L"Name" << szDelim
-		<< L"Size" << szDelim
-		<< L"First bytes" << std::endl;
+	const wchar_t* szHdrType = L"Type";
+	const wchar_t* szHdrName = L"Name";
+	const wchar_t* szHdrSize = L"Size";
+	const wchar_t* szHdrFirstBytes = L"First bytes";
 
 	if (eListType_t::eListOneType == listType)
 	{
-		EnumResourceNamesExW(hMod, resType, EnumResNameProcW, NULL, RESOURCE_ENUM_LN, 0);
+		EnumResourceNamesExW(hModule, resType, EnumResNameProcW, NULL, RESOURCE_ENUM_LN, 0);
 	}
 	else
 	{
-		EnumResourceTypesExW(hMod, EnumResTypeProcW, (LONG_PTR)&listType, RESOURCE_ENUM_LN, 0);
+		EnumResourceTypesExW(hModule, EnumResTypeProcW, (LONG_PTR)&listType, RESOURCE_ENUM_LN, 0);
+	}
+
+	if (eListFormat_t::eTable == listFmt)
+	{
+		const size_t
+			nColType = st_resourceListData.MaxTypeLen() + 2,
+			nColName = st_resourceListData.MaxNameLen() + 2,
+			nColSize = st_resourceListData.MaxSizeDecimalDigits() + 2;
+		std::wcout
+			<< std::left << std::setw(nColType) << szHdrType
+			<< std::left << std::setw(nColName) << szHdrName
+			<< std::left << std::setw(nColSize) << szHdrSize
+			<< std::left << szHdrFirstBytes << std::endl;
+		for (resourceList_t::const_iterator iter = st_resourceListData.Begin();
+			iter != st_resourceListData.End();
+			iter++)
+		{
+			std::wcout
+				<< std::left << std::setw(nColType) << iter->sType
+				<< std::left << std::setw(nColName) << iter->sName
+				<< std::left << std::setw(nColSize) << iter->dwResourceSize
+				<< std::left << iter->sFirstBytes << std::endl;
+		}
+	}
+	else
+	{
+		// Comma- or tab-delimited headers
+		const wchar_t* szDelim = (eListFormat_t::eCommaDelimited == listFmt) ? L"," : L"\t";
+		std::wcout
+			<< szHdrType << szDelim
+			<< szHdrName << szDelim
+			<< szHdrSize << szDelim
+			<< szHdrFirstBytes << std::endl;
+		for (resourceList_t::const_iterator iter = st_resourceListData.Begin();
+			iter != st_resourceListData.End();
+			iter++)
+		{
+			std::wcout
+				<< iter->sType << szDelim
+				<< iter->sName << szDelim
+				<< iter->dwResourceSize << szDelim
+				<< iter->sFirstBytes << std::endl;
+		}
 	}
 }
 
 // ------------------------------------------------------------------------------------------
 
-static void DoExport(HMODULE hMod, RESTYPE resType, const wchar_t* resName, const wchar_t* szOutfile)
+static void DoExport(HMODULE hModule, RESTYPE resType, const wchar_t* resName, const wchar_t* szOutfile)
 {
 	DWORD dwResourceSize = 0;
-	LPVOID pData = GetResourceSizeAndData(hMod, resType, resName, dwResourceSize);
+	LPVOID pData = GetResourceSizeAndData(hModule, resType, resName, dwResourceSize);
 	if (pData)
 	{
 		Wow64FsRedirection fsRedir(true);
