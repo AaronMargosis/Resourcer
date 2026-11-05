@@ -9,6 +9,8 @@
 #include "HEX.h"
 #include "PredefResTypes.h"
 
+//TODO: Need an option to output a formatted table rather than tab-delimited.
+
 // ------------------------------------------------------------------------------------------
 /// <summary>
 /// Write command-line syntax to stderr and then exit.
