@@ -235,6 +235,7 @@ public:
 		m_maxTypeLen = max(m_maxTypeLen, sResType.length());
 		m_maxNameLen = max(m_maxNameLen, sResName.length());
 		m_maxSize = max(m_maxSize, dwResourceSize);
+		m_resourceList.push_back(data);
 	}
 
 	resourceList_t::const_iterator Begin() const
