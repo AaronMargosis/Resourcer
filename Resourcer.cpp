@@ -330,6 +330,7 @@ BOOL CALLBACK EnumResNameProcW(
 			case 0x09: szSpecial = L"TAB"; break;
 			case 0x0A: szSpecial = L"LF"; break;
 			case 0x0D: szSpecial = L"CR"; break;
+			//case 0x20: szSpecial = L"SP"; break;
 			//case 0x22: szSpecial = L"DQ"; break;
 			}
 			if (szSpecial)
@@ -338,7 +339,7 @@ BOOL CALLBACK EnumResNameProcW(
 				strFirstBytes << szSpecial;
 				bAddSpace = true;
 			}
-			else if (0x20 <= b && b < 0x7f)
+			else if (0x20 < b && b < 0x7f)
 			{
 				if (bAddSpace) { strFirstBytes << L" "; }
 				strFirstBytes << (wchar_t)b;
@@ -393,11 +394,11 @@ static void DoList(HMODULE hModule, eListFormat_t listFmt, eListType_t listType,
 		const size_t
 			nColType = st_resourceListData.MaxTypeLen() + 2,
 			nColName = st_resourceListData.MaxNameLen() + 2,
-			nColSize = st_resourceListData.MaxSizeDecimalDigits() + 2;
+			nColSize = st_resourceListData.MaxSizeDecimalDigits();
 		std::wcout
 			<< std::left << std::setw(nColType) << szHdrType
 			<< std::left << std::setw(nColName) << szHdrName
-			<< std::left << std::setw(nColSize) << szHdrSize
+			<< std::right << std::setw(nColSize) << szHdrSize << L"  "
 			<< std::left << szHdrFirstBytes << std::endl;
 		for (resourceList_t::const_iterator iter = st_resourceListData.Begin();
 			iter != st_resourceListData.End();
@@ -406,7 +407,7 @@ static void DoList(HMODULE hModule, eListFormat_t listFmt, eListType_t listType,
 			std::wcout
 				<< std::left << std::setw(nColType) << iter->sType
 				<< std::left << std::setw(nColName) << iter->sName
-				<< std::left << std::setw(nColSize) << iter->dwResourceSize
+				<< std::right << std::setw(nColSize) << iter->dwResourceSize << L"  "
 				<< std::left << iter->sFirstBytes << std::endl;
 		}
 	}
