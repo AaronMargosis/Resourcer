@@ -232,7 +232,7 @@ BOOL CALLBACK EnumResNameProcW(
 
 		// Output first bytes
 		const byte* pBytes = (const byte*)pData;
-		DWORD numBytes = min(dwResourceSize, 8);
+		DWORD numBytes = min(dwResourceSize, 16);
 		bool bAddSpace = false;
 		for (DWORD ixByte = 0; ixByte < numBytes; ++ixByte)
 		{
@@ -243,7 +243,7 @@ BOOL CALLBACK EnumResNameProcW(
 			case 0x09: szSpecial = L"TAB"; break;
 			case 0x0A: szSpecial = L"LF"; break;
 			case 0x0D: szSpecial = L"CR"; break;
-			case 0x22: szSpecial = L"DQ"; break;
+			//case 0x22: szSpecial = L"DQ"; break;
 			}
 			if (szSpecial)
 			{
