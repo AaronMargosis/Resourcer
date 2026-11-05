@@ -1,8 +1,7 @@
 # Resourcer
 
-Resourcer.exe:
-    Resource listing and exporting utility
-
+Resourcer.exe lists and exports resources in a portable executable (PE) file.
+```
 Usage:
 
     Resourcer.exe srcFile -list [-t resType] [-c|-ct]
@@ -47,3 +46,4 @@ Known pre-defined MAKEINTRESOURCE types are:
     RT_ANIICON
     RT_HTML
     RT_MANIFEST
+```
