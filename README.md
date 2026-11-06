@@ -14,7 +14,7 @@ With -list:
   resType : if *, lists all resources;
             if a particular resource type, lists resources of that type
                 (see list below for predefined types);
-            if omitted, lists resources with named(non-MAKEINTRESOURCE) types.
+            if omitted, lists resources with named (non-MAKEINTRESOURCE) types.
   -c      : Output as comma-delimited text.
   -ct     : Output as tab-delimited text.
 
