@@ -39,7 +39,7 @@ static void Usage(const wchar_t* argv0, const wchar_t* szError = nullptr)
 		<< L"  resType : if *, lists all resources;" << std::endl
 		<< L"            if a particular resource type, lists resources of that type" << std::endl
 		<< L"                (see list below for predefined types);" << std::endl
-		<< L"            if omitted, lists resources with named(non-MAKEINTRESOURCE) types." << std::endl
+		<< L"            if omitted, lists resources with named (non-MAKEINTRESOURCE) types." << std::endl
 		<< L"  -c      : Output as comma-delimited text." << std::endl
 		<< L"  -ct     : Output as tab-delimited text." << std::endl
 		<< std::endl
